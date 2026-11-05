@@ -1,53 +1,51 @@
 
 import {
   Injectable,
-  OnModuleDestroy,
   OnModuleInit,
+  OnModuleDestroy,
 } from '@nestjs/common';
-
 import * as mysql from 'mysql2/promise';
-import * as dotenv from 'dotenv';
-
-dotenv.config();
+import { Pool } from 'mysql2/promise';
+import { readFileSync } from 'fs';
 
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
-  pool!: mysql.Pool;
-
+  private pool!: Pool;
   async onModuleInit() {
+    const sslCaPath = process.env.DB_SSL_CA_PATH;
+
+    const sslConfig = sslCaPath
+      ? {
+          ca: readFileSync(sslCaPath, 'utf8'),
+        }
+      : undefined;
+
     this.pool = mysql.createPool({
-      host:
-        process.env.DB_HOST ||
-        'mysql-361cb7c3-escubiop4.a.aivencloud.com',
-
-      port: +(process.env.DB_PORT || 19164),
-      user: process.env.DB_USER || 'avnadmin',
+      host: process.env.DB_HOST,
+      port: Number(process.env.DB_PORT || 3306),
+      user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME || 'defaultdb',
-
+      database: process.env.DB_NAME || process.env.DB_DATABASE,
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
-
-      ssl: {
-        rejectUnauthorized: true,
-      },
+      connectTimeout: 30000,
+      ssl: sslConfig,
     });
 
-    const conn = await this.pool.getConnection();
-    await conn.ping();
-    conn.release();
+    await this.pool.query('SELECT 1');
 
-    console.log('MySQL pool created');
+    console.log('MySQL Database Connected Successfully!');
+  }
+
+  getPool(): Pool {
+    return this.pool;
   }
 
   async onModuleDestroy() {
     if (this.pool) {
       await this.pool.end();
+      console.log('MySQL Database Connection Closed!');
     }
-  }
-
-  getPool(): mysql.Pool {
-    return this.pool;
   }
 }
